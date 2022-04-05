@@ -1,0 +1,16 @@
+{
+    "gopls": {
+        "build.env": {
+            "GOOS": "linux",
+            "GOARCH": "amd64"
+        },
+        "formatting.gofumpt": true,
+        "ui.semanticTokens": true,
+        "ui.diagnostic.analyses": {
+            "nilness": true,
+            "shadow": true,
+            "unusedparams": true,
+            "unusedwrite": true,
+        },
+    },
+}

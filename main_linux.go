@@ -226,10 +226,13 @@ func parseEnv() (exited bool) {
 }
 
 func configureSignals() error {
+	// 这里和 c 语言班 tini 实现不一样，原因是 Go 语言无法修改信号屏蔽字。
+	//
+	// Go 的 Ignore 同样会被子进程继承的
+	// 参见 https://github.com/golang/go/issues/20479
+	signal.Ignore(syscall.SIGTTOU, syscall.SIGTTIN)
+
 	for i := 1; i <= 64; i++ {
-		// if signal.Ignored(syscall.Signal(i)) {
-		// 	continue
-		// }
 		// signal.Ignored 必须的，防止转发某些被忽略的信号，如 docker 场景的 SIGURG。
 		if _, ok := notForwardSignals[syscall.Signal(i)]; !ok {
 			signal.Notify(signalChannel, syscall.Signal(i))
@@ -326,8 +329,7 @@ func isolateChild() (exitCode int) {
 }
 
 func restoreSignals() (exitCode bool) {
-	// 这里和 C 版本不同，Go runtime 依赖信号屏蔽字，所以用户侧，没办法设置。
-	// 但是我在子进程启动的时候忽略了  SIGTTOU 和 SIGTTIN，因此在此恢复他们。
+	// 从父进程中继承了这两个信号的 Ignore 行为，
 	// 不恢复的话 signal.Ignore 在 exec 后仍然生效，exec 的执行环境就被污染了，
 	// 参见： https://github.com/golang/go/issues/20479 。
 
@@ -341,13 +343,6 @@ func restoreSignals() (exitCode bool) {
 
 func bootstrap(childArgs []string) (exitCode int) {
 	// 子进程
-
-	// 这里和 c 语言班 tini 实现不一样，原因是 Go 语言无法修改信号屏蔽字。
-	//
-	// 子进程是后台进程。后面调用 tcsetpgrp / 或者 向标准IO 写日志，会触发 SIGTTOU/SIGTTIN 信号。
-	// 如果不禁用 SIGTTOU/SIGTTIN，其默认行为是暂停进程，导致子进程得不到调度。
-	// 参见：https://man7.org/linux/man-pages/man3/tcgetpgrp.3.html#DESCRIPTION
-	signal.Ignore(syscall.SIGTTOU, syscall.SIGTTIN)
 
 	// Put the child in a process group and make it the foreground process if there is a tty.
 	// 为子进程创建一个进程组，并作为组长进程，如果存在 tty，则将其设置为前台进程。
@@ -438,12 +433,6 @@ func spawn(childArgs []string) (exitCode int, childPid int) {
 		exitCode = 1
 		return
 	}
-	// Parent
-	/* Configure signals */
-	/* 配置信号 */
-	// 如果在子进程 fork 之前配置，那么子进程在引导阶段（fork 之后 exec 之前），
-	// 信号会被错误的处理，从而导致信号丢失。
-	configureSignals()
 	childPid = int(cmd.Process.Pid)
 	printInfo("Spawned child process '%s' with pid '%d'", childArgs[0], childPid)
 	return
@@ -588,6 +577,10 @@ func main() {
 	if parseEnv() {
 		os.Exit(1)
 	}
+
+	/* Configure signals */
+	/* 配置信号 */
+	configureSignals()
 
 	/* Trigger signal on this process when the parent process exits. */
 	/* 配置当前进程的父进程退出时，当前进程收到的信号 */

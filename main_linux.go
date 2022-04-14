@@ -329,6 +329,7 @@ func isolateChild() (exitCode int) {
 }
 
 func restoreSignals() (exitCode bool) {
+	// FIXME: 这里和 tini 行为不一致，没有继承主进程的初始化状态（修复方法是命令行参数添加两个参数标识这两个信号初始化状态是默认还是 Ign）
 	// 从父进程中继承了这两个信号的 Ignore 行为，
 	// 不恢复的话 signal.Ignore 在 exec 后仍然生效，exec 的执行环境就被污染了，
 	// 参见： https://github.com/golang/go/issues/20479 。
